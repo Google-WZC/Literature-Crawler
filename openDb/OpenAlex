@@ -1,0 +1,66 @@
+import requests
+
+# --- 搜索参数 ---
+KEYWORDS = "Physically Unclonable Function"
+AFFILIATION = "Tsinghua University"  # 用于在原始单位字符串中搜索
+
+# --- 构建API请求 ---
+base_url = "https://api.openalex.org/works"
+
+# 请求参数
+params = {
+    # ==================== 关键修改点 ====================
+    # 将错误的 'authorships.institutions.display_name'
+    # 替换为正确的、可搜索的 'raw_affiliation_strings.search'
+    "filter": f"raw_affiliation_strings.search:{AFFILIATION},default.search:{KEYWORDS}",
+    # ====================================================
+    "per-page": 10,
+    "mailto": "15227663216@163.com",  # 你的邮箱
+}
+
+# 添加 User-Agent 请求头，这是非常好的习惯
+headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+}
+
+try:
+    # 在发送请求时，同时传入 params 和 headers
+    response = requests.get(base_url, params=params, headers=headers)
+    response.raise_for_status()
+
+    data = response.json()
+
+    print(f"从 OpenAlex 找到 {data['meta']['count']} 篇相关论文，显示前几篇：")
+    print("-" * 30)
+
+    for work in data["results"]:
+        title = work.get("title", "N/A")
+        doi_url = work.get("doi", "No DOI available")
+
+        bibtex = "BibTeX not available (no DOI)"
+        if work.get("doi"):
+            doi_id = work["doi"].replace("https://doi.org/", "")
+            bibtex_url = f"https://api.citeas.org/product/{doi_id}"
+            try:
+                bib_res = requests.get(bibtex_url, headers=headers)
+                if bib_res.status_code == 200:
+                    bibtex = (
+                        bib_res.json()
+                        .get("citations", [{}])[0]
+                        .get("citation", "Could not fetch BibTeX")
+                    )
+            except Exception as bib_e:
+                print(f"Fetching BibTeX for {doi_id} failed: {bib_e}")
+
+        print(f"标题: {title}")
+        print(f"网址 (DOI): {doi_url}")
+        print(f"BibTeX 引用:\n{bibtex}\n")
+        print("-" * 30)
+
+except requests.exceptions.HTTPError as e:
+    print(f"请求失败，HTTP错误: {e}")
+    # 打印服务器返回的详细信息，方便调试
+    print(f"返回的状态码: {e.response.status_code}")
+    print(f"返回的内容: {e.response.text}")
+except requests.exceptions.RequestException as e:
+    print(f"请求失败，网络或连接错误: {e}")
